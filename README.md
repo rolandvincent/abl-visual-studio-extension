@@ -1,73 +1,73 @@
 # OpenEdge ABL Basics
 
-VS Code extension dasar untuk OpenEdge ABL / Progress 4GL.
+A VS Code extension for OpenEdge ABL / Progress 4GL.
 
-Fitur awal:
+Initial features:
 
-- Syntax highlighting untuk file `.p`, `.i`, dan `.df`
-- Bracket/comment configuration
-- Snippets dasar ABL
-- Autocomplete keyword, statement, dan beberapa built-in function umum
-- Syntax highlighting function bawaan dan modifier ABL berdasarkan Progress ABL Syntax Reference
-- Signature help function bawaan ABL berdasarkan halaman detail function Progress
-- Autocomplete table dan column dari database schema cache JSON
-- Refresh schema cache melalui ODBC connection string
-- Go to Definition / clickable link untuk include file seperti `{ar/fmsg.i}` dan procedure seperti `RUN po/item-price-p.p`
-- Format Document dasar untuk merapikan indentasi blok ABL
+- Syntax highlighting for `.p`, `.i`, and `.df` files
+- Bracket and comment configuration
+- Basic ABL snippets
+- Keyword, statement, and built-in function autocomplete
+- Built-in ABL function and modifier highlighting based on the Progress ABL Syntax Reference
+- Built-in ABL function signature help based on Progress function detail pages
+- Table and column autocomplete from a database schema cache JSON file
+- Schema cache refresh through an ODBC connection string
+- Go to Definition and clickable links for include files such as `{ar/fmsg.i}` and procedures such as `RUN po/item-price-p.p`
+- Basic Format Document support for ABL block indentation
 
-## Menjalankan Extension
+## Running the Extension
 
-1. Jalankan `npm install`
-2. Jalankan `npm run compile`
-3. Buka project ini di VS Code
-4. Tekan `F5` untuk membuka Extension Development Host
-5. Buka file `.p`, `.i`, atau `.df`
+1. Run `npm install`
+2. Run `npm run compile`
+3. Open this project in VS Code
+4. Press `F5` to open the Extension Development Host
+5. Open a `.p`, `.i`, or `.df` file
 
-## Struktur
+## Project Structure
 
-- `src/extension.ts`: autocomplete provider
-- `src/ablSignatures.ts`: generated signature help function bawaan ABL
-- `scripts/generate-abl-signatures.mjs`: generator signature dari dokumentasi Progress
-- `syntaxes/abl.tmLanguage.json`: TextMate grammar untuk syntax highlighting
-- `language-configuration.json`: comment, bracket, dan auto-closing pair
-- `snippets/abl.json`: snippet dasar
+- `src/extension.ts`: autocomplete provider and language features
+- `src/ablSignatures.ts`: generated signature help data for built-in ABL functions
+- `scripts/generate-abl-signatures.mjs`: signature generator from Progress documentation
+- `syntaxes/abl.tmLanguage.json`: TextMate grammar for syntax highlighting
+- `language-configuration.json`: comments, brackets, and auto-closing pairs
+- `snippets/abl.json`: basic snippets
 
 ## Include File Navigation
 
-Path include seperti ini akan dicari relatif ke root folder workspace:
+Include paths are resolved relative to the workspace root:
 
 ```abl
 {ar/fmsg.i}
 RUN po/item-price-p.p.
 ```
 
-Jika file ada di workspace, gunakan `Ctrl+Click` atau command `Go to Definition` pada path include/procedure untuk membuka file tersebut. Document link juga aktif pada path yang berhasil ditemukan.
+If the target file exists in the workspace, use `Ctrl+Click` or the `Go to Definition` command on the include/procedure path to open it. Document links are also enabled for paths that can be resolved.
 
 ## Format Document
 
-Gunakan `Format Document` atau shortcut bawaan VS Code untuk merapikan indentasi file ABL.
+Use `Format Document` or the default VS Code shortcut to format ABL indentation.
 
-Formatter saat ini fokus pada indentasi:
+The formatter currently focuses on indentation for:
 
-- Pembuka blok seperti `DO:`, `FOR EACH:`, `REPEAT:`, `PROCEDURE:`, `FUNCTION:`
-- Penutup blok seperti `END.`, `END PROCEDURE.`, `END FUNCTION.`
-- Blok include multiline `{ ... }`
-- Cabang `ELSE`, `WHEN`, dan `OTHERWISE`
-- `FIELD` setelah `DEFINE TEMP-TABLE`
+- Block openers such as `DO:`, `FOR EACH:`, `REPEAT:`, `PROCEDURE:`, and `FUNCTION:`
+- Block closers such as `END.`, `END PROCEDURE.`, and `END FUNCTION.`
+- Multiline include blocks `{ ... }`
+- `ELSE`, `WHEN`, and `OTHERWISE` branches
+- `FIELD` lines after `DEFINE TEMP-TABLE`
 
-Formatter tidak mengubah kapitalisasi keyword dan tidak memecah statement panjang.
+The formatter does not change keyword casing and does not split long statements.
 
 ## Database Schema Autocomplete
 
-Extension membaca table dan column dari cache JSON agar autocomplete tetap cepat saat mengetik.
+The extension reads table and column metadata from a JSON cache so autocomplete remains fast while editing.
 
-Command yang tersedia:
+Available commands:
 
-- `ABL: Set ODBC Connection String`: simpan ODBC connection string di VS Code SecretStorage
-- `ABL: Refresh Database Schema`: konek ke database lewat ODBC, ambil table/column, lalu tulis cache JSON
-- `ABL: Show Schema Cache`: buka file cache schema yang sedang dipakai
+- `ABL: Set ODBC Connection String`: stores the ODBC connection string in VS Code SecretStorage
+- `ABL: Refresh Database Schema`: connects to the database through ODBC, reads table/column metadata, and writes the cache JSON
+- `ABL: Show Schema Cache`: opens the schema cache file currently in use
 
-Setting penting:
+Important settings:
 
 ```json
 {
@@ -78,9 +78,9 @@ Setting penting:
 }
 ```
 
-`ABL: Set ODBC Connection String` lebih disarankan daripada menyimpan password di `settings.json`.
+Using `ABL: Set ODBC Connection String` is recommended instead of storing passwords in `settings.json`.
 
-Format cache:
+Cache format:
 
 ```json
 {
@@ -103,9 +103,9 @@ Format cache:
 }
 ```
 
-Setelah cache ada:
+After the cache is available:
 
-- Ketik `FOR EACH ` untuk melihat table di daftar autocomplete.
-- Ketik `Customer.` untuk melihat column milik table `Customer`.
+- Type `FOR EACH ` to see tables in the autocomplete list.
+- Type `Customer.` to see columns for the `Customer` table.
 
-Jika query bawaan tidak cocok dengan database/driver OpenEdge Anda, ubah `abl.database.tableQuery` dan `abl.database.columnQuery`. Query table harus mengembalikan nama table di kolom pertama. Query column harus menerima satu parameter `?` berisi nama table dan mengembalikan nama column di kolom pertama.
+If the default queries do not match your OpenEdge database or driver, update `abl.database.tableQuery` and `abl.database.columnQuery`. The table query must return the table name in the first column. The column query must accept one `?` parameter containing the table name and return the column name in the first column.

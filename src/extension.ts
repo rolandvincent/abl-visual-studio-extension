@@ -562,7 +562,7 @@ function findAblVariableDefinitions(document: vscode.TextDocument): AblVariableS
     const originalLine = document.lineAt(lineNumber).text;
     const commentStripped = stripBlockComments(originalLine, commentDepth);
     const codeLine = commentStripped.code;
-    const match = codeLine.match(/^\s*(?:define|def)\s+(?:variable|var)\s+([A-Za-z_][A-Za-z0-9_-]*)\b(?:.*?\s+(?:as|like)\s+([A-Za-z_][A-Za-z0-9_.-]*))?/i);
+    const match = codeLine.match(/^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)?(?:variable|var)\s+([A-Za-z_][A-Za-z0-9_-]*)\b(?:.*?\s+(?:as|like)\s+([A-Za-z_][A-Za-z0-9_.-]*))?/i);
 
     commentDepth = commentStripped.commentDepth;
 
@@ -571,7 +571,7 @@ function findAblVariableDefinitions(document: vscode.TextDocument): AblVariableS
     }
 
     const name = match[1];
-    const originalMatch = /^\s*(?:define|def)\s+(?:variable|var)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/i.exec(originalLine);
+    const originalMatch = /^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)?(?:variable|var)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/i.exec(originalLine);
     const nameStart = originalMatch?.[0].toLowerCase().lastIndexOf(name.toLowerCase()) ?? -1;
 
     if (nameStart < 0) {
@@ -2541,6 +2541,30 @@ async function showSchemaCache(context: vscode.ExtensionContext): Promise<void> 
   await vscode.window.showTextDocument(document);
 }
 
+async function commentAblSelection(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+
+  if (!editor || editor.document.languageId !== 'abl') {
+    await vscode.commands.executeCommand('editor.action.addCommentLine');
+    return;
+  }
+
+  const selections = editor.selections.filter((selection) => !selection.isEmpty);
+
+  if (selections.length === 0) {
+    await vscode.commands.executeCommand('editor.action.addCommentLine');
+    return;
+  }
+
+  const edit = new vscode.WorkspaceEdit();
+
+  for (const selection of selections) {
+    edit.replace(editor.document.uri, selection, `/*${editor.document.getText(selection)}*/`);
+  }
+
+  await vscode.workspace.applyEdit(edit);
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   databaseSchema = await readSchemaCache(context);
   const diagnosticCollection = vscode.languages.createDiagnosticCollection('abl');
@@ -2663,6 +2687,10 @@ export async function activate(context: vscode.ExtensionContext) {
     'abl.showSchemaCache',
     () => showSchemaCache(context)
   );
+  const commentSelectionCommand = vscode.commands.registerCommand(
+    'abl.commentSelection',
+    () => commentAblSelection()
+  );
 
   context.subscriptions.push(
     languageConfiguration,
@@ -2681,6 +2709,7 @@ export async function activate(context: vscode.ExtensionContext) {
     changeDiagnosticsProvider,
     openDiagnosticsProvider,
     closeDiagnosticsProvider,
+    commentSelectionCommand,
     setConnectionCommand,
     refreshSchemaCommand,
     showSchemaCacheCommand

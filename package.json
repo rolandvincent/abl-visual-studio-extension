@@ -1,9 +1,9 @@
 {
-  "name": "openedge-abl-basics",
-  "displayName": "OpenEdge ABL Basics",
-  "description": "Basic syntax highlighting and autocomplete for OpenEdge ABL files.",
-  "version": "0.0.1",
-  "publisher": "local",
+  "name": "openedge-abl-advanced",
+  "displayName": "OpenEdge ABL Full Language Support",
+  "description": "Advanced syntax highlighting and autocomplete for OpenEdge ABL files.",
+  "version": "0.0.2",
+  "publisher": "RolandVincent",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,6 +17,7 @@
   ],
   "activationEvents": [
     "onLanguage:abl",
+    "onCommand:abl.commentSelection",
     "onCommand:abl.setDatabaseConnectionString",
     "onCommand:abl.refreshDatabaseSchema",
     "onCommand:abl.showSchemaCache"
@@ -91,6 +92,10 @@
     ],
     "commands": [
       {
+        "command": "abl.commentSelection",
+        "title": "ABL: Comment Selection"
+      },
+      {
         "command": "abl.setDatabaseConnectionString",
         "title": "ABL: Set ODBC Connection String"
       },
@@ -101,6 +106,14 @@
       {
         "command": "abl.showSchemaCache",
         "title": "ABL: Show Schema Cache"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "abl.commentSelection",
+        "key": "ctrl+k ctrl+c",
+        "mac": "cmd+k cmd+c",
+        "when": "editorTextFocus && editorLangId == abl"
       }
     ],
     "configuration": {
