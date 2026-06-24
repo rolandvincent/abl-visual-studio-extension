@@ -1,0 +1,61 @@
+{
+  "Define variable": {
+    "prefix": "defvar",
+    "body": [
+      "DEFINE VARIABLE ${1:variableName} AS ${2:CHARACTER} NO-UNDO."
+    ],
+    "description": "DEFINE VARIABLE statement"
+  },
+  "Define temp-table": {
+    "prefix": "deftt",
+    "body": [
+      "DEFINE TEMP-TABLE ${1:ttName} NO-UNDO",
+      "    FIELD ${2:fieldName} AS ${3:CHARACTER}."
+    ],
+    "description": "DEFINE TEMP-TABLE statement"
+  },
+  "For each": {
+    "prefix": "foreach",
+    "body": [
+      "FOR EACH ${1:tableName} NO-LOCK:",
+      "    ${0}",
+      "END."
+    ],
+    "description": "FOR EACH block"
+  },
+  "If then do": {
+    "prefix": "ifdo",
+    "body": [
+      "IF ${1:condition} THEN DO:",
+      "    ${0}",
+      "END."
+    ],
+    "description": "IF THEN DO block"
+  },
+  "Procedure": {
+    "prefix": "proc",
+    "body": [
+      "PROCEDURE ${1:procedureName}:",
+      "    ${0}",
+      "END PROCEDURE."
+    ],
+    "description": "PROCEDURE block"
+  },
+  "Function": {
+    "prefix": "func",
+    "body": [
+      "FUNCTION ${1:functionName} RETURNS ${2:CHARACTER} (${3:}):",
+      "    ${0}",
+      "END FUNCTION."
+    ],
+    "description": "FUNCTION block"
+  },
+  "Message": {
+    "prefix": "msg",
+    "body": [
+      "MESSAGE ${1:expression}",
+      "    VIEW-AS ALERT-BOX INFO."
+    ],
+    "description": "MESSAGE alert box"
+  }
+}

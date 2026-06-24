@@ -1,0 +1,156 @@
+{
+  "name": "openedge-abl-basics",
+  "displayName": "OpenEdge ABL Basics",
+  "description": "Basic syntax highlighting and autocomplete for OpenEdge ABL files.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rolandvincent/abl-visual-studio-extension.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:abl",
+    "onCommand:abl.setDatabaseConnectionString",
+    "onCommand:abl.refreshDatabaseSchema",
+    "onCommand:abl.showSchemaCache"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configurationDefaults": {
+      "[abl]": {
+        "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?"
+      },
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": "entity.name.label.abl",
+            "settings": {
+              "foreground": "#d2a8ff",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": "keyword.operator.abl",
+            "settings": {
+              "foreground": "#ff7b72"
+            }
+          },
+          {
+            "scope": "variable.other.preprocessor.abl",
+            "settings": {
+              "foreground": "#dcdcaa"
+            }
+          }
+        ]
+      },
+      "editor.semanticTokenColorCustomizations": {
+        "enabled": true,
+        "rules": {
+          "label": {
+            "foreground": "#d2a8ff",
+            "fontStyle": "bold"
+          }
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "abl",
+        "aliases": [
+          "ABL",
+          "OpenEdge ABL",
+          "Progress 4GL"
+        ],
+        "extensions": [
+          ".p",
+          ".i",
+          ".df"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "abl",
+        "scopeName": "source.abl",
+        "path": "./syntaxes/abl.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "abl",
+        "path": "./snippets/abl.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "abl.setDatabaseConnectionString",
+        "title": "ABL: Set ODBC Connection String"
+      },
+      {
+        "command": "abl.refreshDatabaseSchema",
+        "title": "ABL: Refresh Database Schema"
+      },
+      {
+        "command": "abl.showSchemaCache",
+        "title": "ABL: Show Schema Cache"
+      }
+    ],
+    "configuration": {
+      "title": "OpenEdge ABL",
+      "properties": {
+        "abl.database.connectionString": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "order": 1,
+          "markdownDescription": "ODBC connection string used by `ABL: Refresh Database Schema`. Example: `DSN=OpenEdgeDB;UID=user;PWD=password`. Prefer the command `ABL: Set ODBC Connection String` if the value contains a password, because that stores it in VS Code SecretStorage."
+        },
+        "abl.database.tableQuery": {
+          "type": "string",
+          "default": "SELECT table_name FROM sysprogress.systables WHERE table_type = 'T' ORDER BY table_name",
+          "scope": "resource",
+          "order": 2,
+          "editPresentation": "multilineText",
+          "markdownDescription": "SQL query that returns database table names. The first selected column is used as the table name."
+        },
+        "abl.database.columnQuery": {
+          "type": "string",
+          "default": "SELECT column_name FROM sysprogress.syscolumns WHERE table_name = ? ORDER BY ordinal_position",
+          "scope": "resource",
+          "order": 3,
+          "editPresentation": "multilineText",
+          "markdownDescription": "SQL query that returns columns for one table. Use one `?` parameter for the table name. The first selected column is used as the column name, and the optional second selected column is used as the data type."
+        },
+        "abl.database.schemaCacheFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "order": 4,
+          "markdownDescription": "Optional absolute path for schema cache JSON. Empty value stores cache inside VS Code extension global storage."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "odbc": "^2.5.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.4.5"
+  }
+}
