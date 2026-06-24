@@ -562,7 +562,7 @@ function findAblVariableDefinitions(document: vscode.TextDocument): AblVariableS
     const originalLine = document.lineAt(lineNumber).text;
     const commentStripped = stripBlockComments(originalLine, commentDepth);
     const codeLine = commentStripped.code;
-    const match = codeLine.match(/^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)?(?:variable|var)\s+([A-Za-z_][A-Za-z0-9_-]*)\b(?:.*?\s+(?:as|like)\s+([A-Za-z_][A-Za-z0-9_.-]*))?/i);
+    const match = codeLine.match(/^\s*(?:define|def)\s+(?:(?:new\s+)?(?:global\s+)?(?:shared\s+)?(?:variable|var)|(?:input|input-output|output)\s+(?:param|parameter))\s+([A-Za-z_][A-Za-z0-9_-]*)\b(?:.*?\s+(?:as|like)\s+([A-Za-z_][A-Za-z0-9_.-]*))?/i);
 
     commentDepth = commentStripped.commentDepth;
 
@@ -571,7 +571,7 @@ function findAblVariableDefinitions(document: vscode.TextDocument): AblVariableS
     }
 
     const name = match[1];
-    const originalMatch = /^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)?(?:variable|var)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/i.exec(originalLine);
+    const originalMatch = /^\s*(?:define|def)\s+(?:(?:new\s+)?(?:global\s+)?(?:shared\s+)?(?:variable|var)|(?:input|input-output|output)\s+(?:param|parameter))\s+([A-Za-z_][A-Za-z0-9_-]*)\b/i.exec(originalLine);
     const nameStart = originalMatch?.[0].toLowerCase().lastIndexOf(name.toLowerCase()) ?? -1;
 
     if (nameStart < 0) {
@@ -1428,7 +1428,7 @@ function alignAssignBlocks(lines: string[]): string[] {
 }
 
 function shouldIndentTempTableField(previousTrimmedLine: string, trimmedLine: string): boolean {
-  return /^(?:define|def)\s+temp-table\b/i.test(previousTrimmedLine)
+  return /^(?:define|def)\s+(?:new\s+)?(?:shared\s+)temp-table\b/i.test(previousTrimmedLine)
     && /^field\b/i.test(trimmedLine);
 }
 
@@ -1787,7 +1787,7 @@ function provideAblDocumentSymbols(document: vscode.TextDocument): vscode.Docume
 
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber += 1) {
     const line = document.lineAt(lineNumber).text;
-    const tempTableMatch = line.match(/^\s*(?:define|def)\s+temp-table\s+([A-Za-z_][A-Za-z0-9_-]*)/i);
+    const tempTableMatch = line.match(/^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)?temp-table\s+([A-Za-z_][A-Za-z0-9_-]*)/i);
 
     if (tempTableMatch) {
       const nameStart = line.toLowerCase().indexOf(tempTableMatch[1].toLowerCase());
@@ -1951,24 +1951,21 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
     tokens.push({ range, tokenType });
   };
 
-  for (const label of findAblLabelDefinitions(document)) {
-    for (const range of findAblLabelReferences(document, label)) {
-      addToken(range, 'label');
-    }
+  const labels = findAblLabelDefinitions(document);
+  const variables = findAblVariableDefinitions(document);
+  const routines = findAblRoutineDefinitions(document);
+  const documentTables = getDocumentTables(document);
+
+  const labelNames = new Set(labels.map((l) => l.name.toLowerCase()));
+  const variableNames = new Set(variables.map((v) => v.name.toLowerCase()));
+  const routineMap = new Map(routines.map((r) => [r.name.toLowerCase(), r]));
+
+  for (const label of labels) {
+    addToken(label.nameRange, 'label');
   }
 
-  for (const variable of findAblVariableDefinitions(document)) {
-    for (const range of findAblVariableReferences(document, variable.name)) {
-      addToken(range, 'variable');
-    }
-  }
-
-  for (const routine of findAblRoutineDefinitions(document)) {
-    const tokenType = routine.kind === 'function' ? 'function' : 'method';
-
-    for (const range of findAblRoutineReferences(document, routine)) {
-      addToken(range, tokenType);
-    }
+  for (const routine of routines) {
+    addToken(routine.nameRange, routine.kind === 'function' ? 'function' : 'method');
   }
 
   let commentDepth = 0;
@@ -1976,29 +1973,79 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber += 1) {
     const originalLine = document.lineAt(lineNumber).text;
     const masked = maskNonCodeSegments(originalLine, commentDepth);
-    const pattern = /([A-Za-z_][A-Za-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_-]*)/g;
-    let match: RegExpExecArray | null;
-
+    const code = masked.code;
+    
     commentDepth = masked.commentDepth;
 
-    while ((match = pattern.exec(masked.code)) !== null) {
-      const tableName = match[1];
-      const columnName = match[2];
-      const table = findTable(tableName) ?? findLearnedTable(document, tableName);
+    // 1. Labels references
+    const labelPattern = /\b(?:next|leave)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi;
+    let labelMatch: RegExpExecArray | null;
+    while ((labelMatch = labelPattern.exec(code)) !== null) {
+      const name = labelMatch[1].toLowerCase();
+      if (labelNames.has(name)) {
+        const start = labelMatch.index + labelMatch[0].toLowerCase().lastIndexOf(name);
+        addToken(new vscode.Range(lineNumber, start, lineNumber, start + labelMatch[1].length), 'label');
+      }
+    }
 
+    // 2. Routines references
+    const runPattern = /\brun\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi;
+    let runMatch: RegExpExecArray | null;
+    while ((runMatch = runPattern.exec(code)) !== null) {
+      const name = runMatch[1].toLowerCase();
+      const routine = routineMap.get(name);
+      if (routine) {
+        const start = runMatch.index + runMatch[0].toLowerCase().lastIndexOf(name);
+        addToken(new vscode.Range(lineNumber, start, lineNumber, start + runMatch[1].length), routine.kind === 'function' ? 'function' : 'method');
+      }
+    }
+
+    const functionPattern = /([A-Za-z_][A-Za-z0-9_-]*)\s*\(/g;
+    let functionMatch: RegExpExecArray | null;
+    while ((functionMatch = functionPattern.exec(code)) !== null) {
+      const name = functionMatch[1].toLowerCase();
+      const routine = routineMap.get(name);
+      if (routine && routine.kind === 'function') {
+        const start = functionMatch.index;
+        addToken(new vscode.Range(lineNumber, start, lineNumber, start + functionMatch[1].length), 'function');
+      }
+    }
+
+    // 3. Variable references
+    ablIdentifierPattern.lastIndex = 0;
+    let varMatch: RegExpExecArray | null;
+    while ((varMatch = ablIdentifierPattern.exec(code)) !== null) {
+      const name = varMatch[0].toLowerCase();
+      if (variableNames.has(name)) {
+        const range = new vscode.Range(lineNumber, varMatch.index, lineNumber, varMatch.index + varMatch[0].length);
+        if (!isDottedIdentifier(originalLine, range)) {
+          addToken(range, 'variable');
+        }
+      }
+    }
+
+    // 4. Tables and fields
+    const structPattern = /([A-Za-z_][A-Za-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_-]*)/g;
+    let structMatch: RegExpExecArray | null;
+    while ((structMatch = structPattern.exec(code)) !== null) {
+      const tableName = structMatch[1];
+      const columnName = structMatch[2];
+      
+      const table = findTable(tableName) ?? documentTables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+      
       if (!table) {
         continue;
       }
-
+      
       const column = table.columns.find((item) => item.name.toLowerCase() === columnName.toLowerCase());
-
+      
       if (!column) {
         continue;
       }
-
-      addToken(new vscode.Range(lineNumber, match.index, lineNumber, match.index + tableName.length), 'struct');
+      
+      addToken(new vscode.Range(lineNumber, structMatch.index, lineNumber, structMatch.index + tableName.length), 'struct');
       addToken(
-        new vscode.Range(lineNumber, match.index + tableName.length + 1, lineNumber, match.index + tableName.length + 1 + columnName.length),
+        new vscode.Range(lineNumber, structMatch.index + tableName.length + 1, lineNumber, structMatch.index + tableName.length + 1 + columnName.length),
         'property'
       );
     }
@@ -2215,7 +2262,7 @@ function getTempTablesFromDocument(document: vscode.TextDocument): SchemaTable[]
 
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber += 1) {
     const line = document.lineAt(lineNumber).text;
-    const tempTableMatch = line.match(/^\s*(?:define|def)\s+temp-table\s+([A-Za-z_][A-Za-z0-9_-]*)/i);
+    const tempTableMatch = line.match(/^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)temp-table\s+([A-Za-z_][A-Za-z0-9_-]*)/i);
 
     if (tempTableMatch) {
       const tableName = tempTableMatch[1];
