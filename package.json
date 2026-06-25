@@ -42,6 +42,18 @@
             "settings": {
               "foreground": "#ff7b72"
             }
+          },
+          {
+            "scope": [
+              "punctuation.section.preprocessor.begin.abl",
+              "punctuation.section.preprocessor.end.abl",
+              "keyword.control.preprocessor.abl",
+              "variable.parameter.preprocessor.abl",
+              "meta.preprocessor.content.abl"
+            ],
+            "settings": {
+              "foreground": "#c7ae7a"
+            }
           }
         ]
       },
@@ -56,7 +68,7 @@
             "foreground": "#8a5a00"
           },
           "preprocessorDark": {
-            "foreground": "#dcdcaa"
+            "foreground": "#e0cea7"
           }
         }
       }

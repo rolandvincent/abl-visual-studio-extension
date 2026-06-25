@@ -344,7 +344,7 @@ const includeEndPattern = /^\s*\}/;
 const includePathPattern = /\{\s*([A-Za-z0-9_./\\-]+\.(?:i|p|df))\b/gi;
 const runPathPattern = /\brun\s+([A-Za-z0-9_./\\-]+\.p)\b/gi;
 const ablIdentifierPattern = /[A-Za-z_][A-Za-z0-9_-]*/g;
-const semanticTokenTypes = ['variable', 'function', 'method', 'struct', 'property', 'label', 'preprocessorLight', 'preprocessorDark'];
+const semanticTokenTypes = ['variable', 'function', 'method', 'class', 'property', 'label', 'preprocessorLight', 'preprocessorDark'];
 const semanticTokenLegend = new vscode.SemanticTokensLegend(semanticTokenTypes, []);
 const dotBlockDiagnosticCode = 'abl.blockHeaderDot';
 
@@ -1893,7 +1893,7 @@ function getTableColumnAtPosition(document: vscode.TextDocument, position: vscod
 }
 
 function provideAblHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
-  if (isInsideIncludeInvocation(document.lineAt(position.line).text, position.character)) {
+  if (isInsideIncludeInvocationAtPosition(document, position)) {
     return undefined;
   }
 
@@ -1938,30 +1938,67 @@ function provideAblHover(document: vscode.TextDocument, position: vscode.Positio
   return undefined;
 }
 
-function isInsideIncludeInvocation(line: string, character: number): boolean {
+function isInsideIncludeInvocationAtPosition(document: vscode.TextDocument, position: vscode.Position): boolean {
   let includeDepth = 0;
+  let commentDepth = 0;
 
-  for (let index = 0; index < Math.min(character, line.length); index += 1) {
-    const char = line[index];
+  for (let lineNumber = 0; lineNumber <= position.line; lineNumber += 1) {
+    const line = document.lineAt(lineNumber).text;
+    const limit = lineNumber === position.line ? Math.min(position.character, line.length) : line.length;
+    let index = 0;
 
-    if (char === '{' && (line[index + 1] === '&' || /\d/.test(line[index + 1] ?? ''))) {
-      const macroEnd = line.indexOf('}', index + 1);
+    while (index < limit) {
+      if (commentDepth > 0) {
+        if (line[index] === '/' && line[index + 1] === '*') {
+          commentDepth += 1;
+          index += 2;
+          continue;
+        }
 
-      if (macroEnd === -1 || macroEnd >= character) {
-        return false;
+        if (line[index] === '*' && line[index + 1] === '/') {
+          commentDepth -= 1;
+          index += 2;
+          continue;
+        }
+
+        index += 1;
+        continue;
       }
 
-      index = macroEnd;
-      continue;
-    }
+      if (line[index] === '/' && line[index + 1] === '*') {
+        commentDepth = 1;
+        index += 2;
+        continue;
+      }
 
-    if (char === '{') {
-      includeDepth += 1;
-      continue;
-    }
+      if (line[index] === '"' || line[index] === "'") {
+        const quote = line[index];
+        index += 1;
 
-    if (char === '}' && includeDepth > 0) {
-      includeDepth -= 1;
+        while (index < limit) {
+          if (line[index] === '~') {
+            index += 2;
+            continue;
+          }
+
+          if (line[index] === quote) {
+            index += 1;
+            break;
+          }
+
+          index += 1;
+        }
+
+        continue;
+      }
+
+      if (line[index] === '{') {
+        includeDepth += 1;
+      } else if (line[index] === '}' && includeDepth > 0) {
+        includeDepth -= 1;
+      }
+
+      index += 1;
     }
   }
 
@@ -1970,7 +2007,30 @@ function isInsideIncludeInvocation(line: string, character: number): boolean {
 
 function isRangeInsideIncludeInvocation(document: vscode.TextDocument, range: vscode.Range): boolean {
   return range.isSingleLine
-    && isInsideIncludeInvocation(document.lineAt(range.start.line).text, range.start.character);
+    && isInsideIncludeInvocationAtPosition(document, range.start);
+}
+
+function isRangeInsideIncludePath(document: vscode.TextDocument, range: vscode.Range): boolean {
+  if (!range.isSingleLine) {
+    return false;
+  }
+
+  const line = document.lineAt(range.start.line).text;
+  let match: RegExpExecArray | null;
+
+  includePathPattern.lastIndex = 0;
+
+  while ((match = includePathPattern.exec(line)) !== null) {
+    const includePath = match[1];
+    const start = match.index + match[0].indexOf(includePath);
+    const end = start + includePath.length;
+
+    if (range.start.character < end && range.end.character > start) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function preprocessorTokenTypeForActiveTheme(): string {
@@ -1980,28 +2040,162 @@ function preprocessorTokenTypeForActiveTheme(): string {
     : 'preprocessorDark';
 }
 
-function findPreprocessorIncludeRanges(code: string, lineNumber: number): vscode.Range[] {
+function createPreprocessorContentRanges(document: vscode.TextDocument): vscode.Range[] {
   const ranges: vscode.Range[] = [];
-  const pattern = /\{[^{}]*\}/g;
-  let match: RegExpExecArray | null;
+  let includeDepth = 0;
+  let commentDepth = 0;
 
-  while ((match = pattern.exec(code)) !== null) {
-    ranges.push(new vscode.Range(lineNumber, match.index, lineNumber, match.index + match[0].length));
+  const pushRange = (lineNumber: number, start: number, end: number) => {
+    if (start < end) {
+      ranges.push(new vscode.Range(lineNumber, start, lineNumber, end));
+    }
+  };
+
+  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber += 1) {
+    const line = document.lineAt(lineNumber).text;
+    let index = 0;
+
+    while (index < line.length) {
+      if (commentDepth > 0) {
+        if (line[index] === '/' && line[index + 1] === '*') {
+          commentDepth += 1;
+          index += 2;
+          continue;
+        }
+
+        if (line[index] === '*' && line[index + 1] === '/') {
+          commentDepth -= 1;
+          index += 2;
+          continue;
+        }
+
+        index += 1;
+        continue;
+      }
+
+      if (line[index] === '/' && line[index + 1] === '*') {
+        commentDepth = 1;
+        index += 2;
+        continue;
+      }
+
+      if (line[index] === '"' || line[index] === "'") {
+        const quote = line[index];
+        index += 1;
+
+        while (index < line.length) {
+          if (line[index] === '~') {
+            index += 2;
+            continue;
+          }
+
+          if (line[index] === quote) {
+            index += 1;
+            break;
+          }
+
+          index += 1;
+        }
+
+        continue;
+      }
+
+      if (line[index] === '{') {
+        const start = index;
+        includeDepth += 1;
+        index += 1;
+        pushRange(lineNumber, start, index);
+        continue;
+      }
+
+      if (line[index] === '}' && includeDepth > 0) {
+        const start = index;
+        includeDepth -= 1;
+        index += 1;
+        pushRange(lineNumber, start, index);
+        continue;
+      }
+
+      if (includeDepth > 0 && !/\s/.test(line[index])) {
+        const start = index;
+
+        while (
+          index < line.length
+          && includeDepth > 0
+          && !/\s/.test(line[index])
+          && line[index] !== '{'
+          && line[index] !== '}'
+          && line[index] !== '"'
+          && line[index] !== "'"
+          && !(line[index] === '/' && line[index + 1] === '*')
+        ) {
+          index += 1;
+        }
+
+        pushRange(lineNumber, start, index);
+        continue;
+      }
+
+      index += 1;
+    }
   }
 
   return ranges;
+}
+
+function subtractProtectedRanges(range: vscode.Range, protectedRanges: vscode.Range[]): vscode.Range[] {
+  let segments = [{ start: range.start.character, end: range.end.character }];
+
+  for (const protectedRange of protectedRanges) {
+    if (protectedRange.start.line !== range.start.line) {
+      continue;
+    }
+
+    const protectedStart = protectedRange.start.character;
+    const protectedEnd = protectedRange.end.character;
+    const nextSegments: Array<{ start: number; end: number }> = [];
+
+    for (const segment of segments) {
+      if (protectedEnd <= segment.start || protectedStart >= segment.end) {
+        nextSegments.push(segment);
+        continue;
+      }
+
+      if (segment.start < protectedStart) {
+        nextSegments.push({ start: segment.start, end: protectedStart });
+      }
+
+      if (protectedEnd < segment.end) {
+        nextSegments.push({ start: protectedEnd, end: segment.end });
+      }
+    }
+
+    segments = nextSegments;
+  }
+
+  return segments
+    .filter((segment) => segment.start < segment.end)
+    .map((segment) => new vscode.Range(range.start.line, segment.start, range.start.line, segment.end));
 }
 
 function provideAblSemanticTokens(document: vscode.TextDocument): vscode.SemanticTokens {
   const tokens: Array<{ range: vscode.Range; tokenType: string }> = [];
   const seen = new Set<string>();
 
-  const addToken = (range: vscode.Range, tokenType: string) => {
+  const addToken = (range: vscode.Range, tokenType: string, allowInsideInclude = false) => {
     if (!range.isSingleLine || range.start.character === range.end.character) {
       return;
     }
 
-    if (isRangeInsideIncludeInvocation(document, range)) {
+    if (!allowInsideInclude && isRangeInsideIncludeInvocation(document, range)) {
+      return;
+    }
+
+    if (
+      tokenType !== 'preprocessorLight'
+      && tokenType !== 'preprocessorDark'
+      && isRangeInsideIncludePath(document, range)
+    ) {
       return;
     }
 
@@ -2024,7 +2218,6 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
   const variableNames = new Set(variables.map((v) => v.name.toLowerCase()));
   const routineMap = new Map(routines.map((r) => [r.name.toLowerCase(), r]));
   const knownTableNames = createKnownTableNameSet(documentTables);
-  const preprocessorTokenType = preprocessorTokenTypeForActiveTheme();
 
   for (const label of labels) {
     addToken(label.nameRange, 'label');
@@ -2043,12 +2236,7 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
     
     commentDepth = masked.commentDepth;
 
-    // 1. Preprocessor include invocations
-    for (const range of findPreprocessorIncludeRanges(code, lineNumber)) {
-      addToken(range, preprocessorTokenType);
-    }
-
-    // 2. Labels references
+    // 1. Labels references
     const labelPattern = /\b(?:next|leave)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi;
     let labelMatch: RegExpExecArray | null;
     while ((labelMatch = labelPattern.exec(code)) !== null) {
@@ -2059,7 +2247,7 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
       }
     }
 
-    // 3. Routines references
+    // 2. Routines references
     const runPattern = /\brun\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi;
     let runMatch: RegExpExecArray | null;
     while ((runMatch = runPattern.exec(code)) !== null) {
@@ -2082,14 +2270,21 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
       }
     }
 
-    // 4. Table references in record phrases
+    // 3. Table references in record phrases
+    const tempTableDefinitionMatch = /^\s*(?:define|def)\s+(?:new\s+)?(?:shared\s+)?temp-table\s+([A-Za-z_][A-Za-z0-9_-]*)\b/i.exec(code);
+    if (tempTableDefinitionMatch) {
+      const tableName = tempTableDefinitionMatch[1];
+      const start = tempTableDefinitionMatch[0].toLowerCase().lastIndexOf(tableName.toLowerCase());
+      addToken(new vscode.Range(lineNumber, start, lineNumber, start + tableName.length), 'class', true);
+    }
+
     for (const range of findRecordPhraseTableRanges(code, lineNumber, knownTableNames)) {
       if (!isDottedIdentifier(originalLine, range)) {
-        addToken(range, 'struct');
+        addToken(range, 'class', true);
       }
     }
 
-    // 5. Variable references
+    // 4. Variable references
     ablIdentifierPattern.lastIndex = 0;
     let varMatch: RegExpExecArray | null;
     while ((varMatch = ablIdentifierPattern.exec(code)) !== null) {
@@ -2097,12 +2292,12 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
       if (variableNames.has(name)) {
         const range = new vscode.Range(lineNumber, varMatch.index, lineNumber, varMatch.index + varMatch[0].length);
         if (!isDottedIdentifier(originalLine, range)) {
-          addToken(range, 'variable');
+          addToken(range, 'variable', true);
         }
       }
     }
 
-    // 6. Tables and fields
+    // 5. Tables and fields
     const structPattern = /([A-Za-z_][A-Za-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_-]*)/g;
     let structMatch: RegExpExecArray | null;
     while ((structMatch = structPattern.exec(code)) !== null) {
@@ -2121,11 +2316,21 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
         continue;
       }
       
-      addToken(new vscode.Range(lineNumber, structMatch.index, lineNumber, structMatch.index + tableName.length), 'struct');
+      addToken(new vscode.Range(lineNumber, structMatch.index, lineNumber, structMatch.index + tableName.length), 'class', true);
       addToken(
         new vscode.Range(lineNumber, structMatch.index + tableName.length + 1, lineNumber, structMatch.index + tableName.length + 1 + columnName.length),
-        'property'
+        'property',
+        true
       );
+    }
+  }
+
+  const protectedRanges = tokens.map((token) => token.range);
+  const preprocessorTokenType = preprocessorTokenTypeForActiveTheme();
+
+  for (const range of createPreprocessorContentRanges(document)) {
+    for (const segment of subtractProtectedRanges(range, protectedRanges)) {
+      addToken(segment, preprocessorTokenType, true);
     }
   }
 

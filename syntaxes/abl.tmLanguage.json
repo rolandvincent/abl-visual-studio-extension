@@ -19,6 +19,9 @@
       "include": "#labels"
     },
     {
+      "include": "#tables"
+    },
+    {
       "include": "#functions"
     },
     {
@@ -50,15 +53,38 @@
       "patterns": [
         {
           "name": "keyword.control.preprocessor.abl",
-          "match": "^\\s*&\\w+\\b.*$"
+          "match": "^\\s*&[A-Za-z_][A-Za-z0-9_-]*\\b"
         },
         {
-          "name": "variable.other.preprocessor.abl",
+          "name": "variable.parameter.preprocessor.abl",
+          "match": "&[A-Za-z_][A-Za-z0-9_-]*"
+        },
+        {
           "begin": "\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.preprocessor.begin.abl"
+            }
+          },
           "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.preprocessor.end.abl"
+            }
+          },
           "patterns": [
             {
+              "include": "#comments"
+            },
+            {
               "include": "#strings"
+            },
+            {
+              "include": "#preprocessor"
+            },
+            {
+              "name": "meta.preprocessor.content.abl",
+              "match": "[^{}\"'\\s]+"
             }
           ]
         }
@@ -69,6 +95,31 @@
         {
           "name": "entity.name.label.abl",
           "match": "(?i)^\\s*(?!(?:do|repeat|for|case|if|else|procedure|function|method|constructor|destructor|class|interface)\\b)[a-z_][a-z0-9_-]*\\s*:(?=\\s*(?:(?:do|repeat|for|case)\\b|.*\\bthen\\s+do\\b|else\\s+do\\b))"
+        }
+      ]
+    },
+    "tables": {
+      "patterns": [
+        {
+          "name": "meta.definition.temp-table.abl",
+          "match": "(?i)^(\\s*)(define|def)(\\s+)(?:(new)(\\s+))?(?:(shared)(\\s+))?(temp-table)(\\s+)([A-Za-z_][A-Za-z0-9_-]*)",
+          "captures": {
+            "2": {
+              "name": "storage.modifier.abl"
+            },
+            "4": {
+              "name": "storage.modifier.abl"
+            },
+            "6": {
+              "name": "storage.modifier.abl"
+            },
+            "8": {
+              "name": "storage.modifier.abl"
+            },
+            "10": {
+              "name": "entity.name.type.class.abl"
+            }
+          }
         }
       ]
     },
