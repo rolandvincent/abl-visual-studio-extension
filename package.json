@@ -2,7 +2,7 @@
   "name": "openedge-abl-advanced",
   "displayName": "OpenEdge ABL Full Language Support",
   "description": "Advanced syntax highlighting and autocomplete for OpenEdge ABL files.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "RolandVincent",
   "license": "MIT",
   "repository": {
@@ -42,12 +42,6 @@
             "settings": {
               "foreground": "#ff7b72"
             }
-          },
-          {
-            "scope": "variable.other.preprocessor.abl",
-            "settings": {
-              "foreground": "#dcdcaa"
-            }
           }
         ]
       },
@@ -57,6 +51,12 @@
           "label": {
             "foreground": "#d2a8ff",
             "fontStyle": "bold"
+          },
+          "preprocessorLight": {
+            "foreground": "#8a5a00"
+          },
+          "preprocessorDark": {
+            "foreground": "#dcdcaa"
           }
         }
       }

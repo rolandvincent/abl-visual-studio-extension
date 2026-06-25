@@ -82,6 +82,8 @@ const completions: AblCompletion[] = [
   { label: 'EXCLUSIVE-LOCK', detail: 'ABL record lock option' },
   { label: 'NO-UNDO', detail: 'ABL variable option' },
   { label: 'NO-ERROR', detail: 'ABL error option' },
+  { label: 'YES', detail: 'ABL bool option' },
+  { label: 'NO', detail: 'ABL bool option' },
   { label: 'ABSOLUTE', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'ACCUM', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'ADD-INTERVAL', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
@@ -286,6 +288,7 @@ const completions: AblCompletion[] = [
   { label: 'STRING', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'SUBSTITUTE', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'SUBSTRING', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
+  { label: 'SUBSTR', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'SUPER', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'TENANT-ID', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
   { label: 'TENANT-NAME', detail: 'ABL function', kind: vscode.CompletionItemKind.Function },
@@ -341,7 +344,7 @@ const includeEndPattern = /^\s*\}/;
 const includePathPattern = /\{\s*([A-Za-z0-9_./\\-]+\.(?:i|p|df))\b/gi;
 const runPathPattern = /\brun\s+([A-Za-z0-9_./\\-]+\.p)\b/gi;
 const ablIdentifierPattern = /[A-Za-z_][A-Za-z0-9_-]*/g;
-const semanticTokenTypes = ['variable', 'function', 'method', 'struct', 'property', 'label'];
+const semanticTokenTypes = ['variable', 'function', 'method', 'struct', 'property', 'label', 'preprocessorLight', 'preprocessorDark'];
 const semanticTokenLegend = new vscode.SemanticTokensLegend(semanticTokenTypes, []);
 const dotBlockDiagnosticCode = 'abl.blockHeaderDot';
 
@@ -954,6 +957,48 @@ function isDottedIdentifier(line: string, range: vscode.Range): boolean {
 
   return (line[dotBefore] === '.' && isAblIdentifierChar(line[dotBefore - 1]))
     || (line[dotAfter] === '.' && isAblIdentifierStart(line[dotAfter + 1]));
+}
+
+function createKnownTableNameSet(documentTables: SchemaTable[]): Set<string> {
+  const names = new Set<string>();
+
+  for (const table of databaseSchema.tables) {
+    names.add(table.name.toLowerCase());
+  }
+
+  for (const table of documentTables) {
+    names.add(table.name.toLowerCase());
+  }
+
+  return names;
+}
+
+function findRecordPhraseTableRanges(code: string, lineNumber: number, knownTableNames: Set<string>): vscode.Range[] {
+  const ranges: vscode.Range[] = [];
+  const patterns = [
+    /\bfor\s+(?:each|first|last)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi,
+    /\bfind\s+(?:(?:first|last|next|prev|current)\s+)?([A-Za-z_][A-Za-z0-9_-]*)\b/gi,
+    /\b(?:create|delete|release)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi,
+    /\b(?:available|avail)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi,
+    /\bcan-find\s*\(\s*(?:(?:first|last)\s+)?([A-Za-z_][A-Za-z0-9_-]*)\b/gi
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(code)) !== null) {
+      const tableName = match[1];
+
+      if (!knownTableNames.has(tableName.toLowerCase())) {
+        continue;
+      }
+
+      const start = match.index + match[0].toLowerCase().lastIndexOf(tableName.toLowerCase());
+      ranges.push(new vscode.Range(lineNumber, start, lineNumber, start + tableName.length));
+    }
+  }
+
+  return ranges;
 }
 
 function findAblVariableReferences(document: vscode.TextDocument, name: string): vscode.Range[] {
@@ -1928,6 +1973,25 @@ function isRangeInsideIncludeInvocation(document: vscode.TextDocument, range: vs
     && isInsideIncludeInvocation(document.lineAt(range.start.line).text, range.start.character);
 }
 
+function preprocessorTokenTypeForActiveTheme(): string {
+  return vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Light
+    || vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrastLight
+    ? 'preprocessorLight'
+    : 'preprocessorDark';
+}
+
+function findPreprocessorIncludeRanges(code: string, lineNumber: number): vscode.Range[] {
+  const ranges: vscode.Range[] = [];
+  const pattern = /\{[^{}]*\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(code)) !== null) {
+    ranges.push(new vscode.Range(lineNumber, match.index, lineNumber, match.index + match[0].length));
+  }
+
+  return ranges;
+}
+
 function provideAblSemanticTokens(document: vscode.TextDocument): vscode.SemanticTokens {
   const tokens: Array<{ range: vscode.Range; tokenType: string }> = [];
   const seen = new Set<string>();
@@ -1959,6 +2023,8 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
   const labelNames = new Set(labels.map((l) => l.name.toLowerCase()));
   const variableNames = new Set(variables.map((v) => v.name.toLowerCase()));
   const routineMap = new Map(routines.map((r) => [r.name.toLowerCase(), r]));
+  const knownTableNames = createKnownTableNameSet(documentTables);
+  const preprocessorTokenType = preprocessorTokenTypeForActiveTheme();
 
   for (const label of labels) {
     addToken(label.nameRange, 'label');
@@ -1977,7 +2043,12 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
     
     commentDepth = masked.commentDepth;
 
-    // 1. Labels references
+    // 1. Preprocessor include invocations
+    for (const range of findPreprocessorIncludeRanges(code, lineNumber)) {
+      addToken(range, preprocessorTokenType);
+    }
+
+    // 2. Labels references
     const labelPattern = /\b(?:next|leave)\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi;
     let labelMatch: RegExpExecArray | null;
     while ((labelMatch = labelPattern.exec(code)) !== null) {
@@ -1988,7 +2059,7 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
       }
     }
 
-    // 2. Routines references
+    // 3. Routines references
     const runPattern = /\brun\s+([A-Za-z_][A-Za-z0-9_-]*)\b/gi;
     let runMatch: RegExpExecArray | null;
     while ((runMatch = runPattern.exec(code)) !== null) {
@@ -2011,7 +2082,14 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
       }
     }
 
-    // 3. Variable references
+    // 4. Table references in record phrases
+    for (const range of findRecordPhraseTableRanges(code, lineNumber, knownTableNames)) {
+      if (!isDottedIdentifier(originalLine, range)) {
+        addToken(range, 'struct');
+      }
+    }
+
+    // 5. Variable references
     ablIdentifierPattern.lastIndex = 0;
     let varMatch: RegExpExecArray | null;
     while ((varMatch = ablIdentifierPattern.exec(code)) !== null) {
@@ -2024,7 +2102,7 @@ function provideAblSemanticTokens(document: vscode.TextDocument): vscode.Semanti
       }
     }
 
-    // 4. Tables and fields
+    // 6. Tables and fields
     const structPattern = /([A-Za-z_][A-Za-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_-]*)/g;
     let structMatch: RegExpExecArray | null;
     while ((structMatch = structPattern.exec(code)) !== null) {
@@ -2681,13 +2759,18 @@ export async function activate(context: vscode.ExtensionContext) {
   const hoverProvider = vscode.languages.registerHoverProvider('abl', {
     provideHover: provideAblHover
   });
+  const semanticTokensChanged = new vscode.EventEmitter<void>();
   const semanticTokensProvider = vscode.languages.registerDocumentSemanticTokensProvider(
     'abl',
     {
+      onDidChangeSemanticTokens: semanticTokensChanged.event,
       provideDocumentSemanticTokens: provideAblSemanticTokens
     },
     semanticTokenLegend
   );
+  const colorThemeProvider = vscode.window.onDidChangeActiveColorTheme(() => {
+    semanticTokensChanged.fire();
+  });
   const signatureHelpProvider = vscode.languages.registerSignatureHelpProvider(
     'abl',
     {
@@ -2748,7 +2831,9 @@ export async function activate(context: vscode.ExtensionContext) {
     documentLinkProvider,
     documentSymbolProvider,
     hoverProvider,
+    semanticTokensChanged,
     semanticTokensProvider,
+    colorThemeProvider,
     signatureHelpProvider,
     formattingProvider,
     codeActionProvider,

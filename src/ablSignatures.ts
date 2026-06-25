@@ -1979,6 +1979,18 @@ export const builtInSignatures: Record<string, AblSignatureDefinition[]> = {
       ]
     }
   ],
+  "substr": [
+    {
+      "label": "SUBSTR (source, position [, length [, type]])",
+      "documentation": "Extracts a portion of a character string from a field or variable. source A CHARACTER or LONGCHAR expression from which you want to extract characters or bytes. position An integer expression that indicates the position of the first character you",
+      "parameters": [
+        "source",
+        "position",
+        "length",
+        "type"
+      ]
+    }
+  ],
   "super": [
     {
       "label": "SUPER [(parameter [, parameter] ...)]",
